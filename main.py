@@ -50,6 +50,7 @@ async def startup_event():
     logger.info(f"Server ready ({elapsed:.2f}s)")
 
 
+@app.get("/")
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
