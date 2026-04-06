@@ -53,7 +53,6 @@ def chunk_and_index(
         metadata={
             "filename": filename,
             "document_id": document_id,
-            "user_id": user_id,
         },
     )
 
