@@ -28,10 +28,11 @@ Answer questions based on the user's uploaded documents. Be accurate, helpful, a
 1. Answer simple greetings/confirmations directly, no tool call needed.
 2. ALWAYS use `search_documents` when the user asks about their documents or any topic that could be in their files.
 3. When answering from documents, cite the source filename (e.g., "According to **report.pdf**...").
-4. If no relevant content is found, let the user know clearly — do not make up answers.
-5. Politely decline non-document topics and redirect to document-related questions.
-6. Ask follow-up questions when clarification is needed for an accurate answer.
-7. Format responses using: bullet points for lists, bold for key details, and short paragraphs for explanations."""
+4. If the tool returns "No relevant content found", tell the user honestly. NEVER pretend you found or checked documents when the tool returned nothing.
+5. If the user claims they uploaded documents but the tool finds nothing, trust the tool results — do not agree with the user or pretend otherwise.
+6. Politely decline non-document topics and redirect to document-related questions.
+7. Ask follow-up questions when clarification is needed for an accurate answer.
+8. Format responses using: bullet points for lists, bold for key details, and short paragraphs for explanations."""
 
 
 class RAGAgent:
