@@ -8,11 +8,9 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from sse_starlette.sse import EventSourceResponse
 
 from config.settings import Settings
-from src.auth import authorize_request
+from src.auth import get_current_user
 from src.models import (
     ChatRequest,
-    ChatListRequest,
-    ChatMessagesRequest,
     ChatListResponse,
     ChatMessageResponse,
 )
@@ -23,21 +21,19 @@ router = APIRouter(prefix="/api", tags=["chat"])
 
 
 @router.post("/chat")
-async def chat_stream(request: ChatRequest, req: Request, _auth: None = Depends(authorize_request)):
-    """Chat with documents via SSE streaming — same pattern as GuidersAI."""
+async def chat_stream(request: ChatRequest, req: Request, user_id: str = Depends(get_current_user)):
+    """Chat with documents via SSE streaming."""
     chat_history_mgr = req.app.state.chat_history
     agent = req.app.state.agent
 
     async def event_generator():
         try:
-            # Get or create chat
             chat_id = chat_history_mgr.get_or_create_chat(
-                user_id=request.user_id,
+                user_id=user_id,
                 chat_id=request.chat_id,
                 first_message=request.message if request.chat_id is None else None,
             )
 
-            # Load chat history
             chat_history = chat_history_mgr.get_chat_history(
                 chat_id=chat_id, limit=Settings.CHAT_HISTORY_LIMIT
             )
@@ -52,7 +48,7 @@ async def chat_stream(request: ChatRequest, req: Request, _auth: None = Depends(
             try:
                 async for chunk in agent.chat_streaming(
                     request.message,
-                    user_id=request.user_id,
+                    user_id=user_id,
                     chat_history=chat_history,
                 ):
                     assistant_response_parts.append(chunk)
@@ -61,7 +57,6 @@ async def chat_stream(request: ChatRequest, req: Request, _auth: None = Depends(
                         "data": chunk,
                     }
 
-                # Save conversation after streaming completes
                 assistant_response = "".join(assistant_response_parts)
                 if assistant_response.strip():
                     try:
@@ -120,13 +115,13 @@ async def chat_stream(request: ChatRequest, req: Request, _auth: None = Depends(
     return EventSourceResponse(event_generator())
 
 
-@router.post("/chat/all", response_model=List[ChatListResponse])
-async def get_all_chats(request: ChatListRequest, req: Request, _auth: None = Depends(authorize_request)):
-    """Get all chats for a user."""
+@router.get("/chat/all", response_model=List[ChatListResponse])
+async def get_all_chats(req: Request, user_id: str = Depends(get_current_user)):
+    """Get all chats for the authenticated user."""
     chat_history_mgr = req.app.state.chat_history
 
     try:
-        chats = chat_history_mgr.get_all_chats(request.user_id)
+        chats = chat_history_mgr.get_all_chats(user_id)
 
         response_list = []
         for chat in chats:
@@ -156,13 +151,18 @@ async def get_all_chats(request: ChatListRequest, req: Request, _auth: None = De
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
-@router.post("/chat/messages", response_model=List[ChatMessageResponse])
-async def get_chat_messages(request: ChatMessagesRequest, req: Request, _auth: None = Depends(authorize_request)):
+@router.get("/chat/messages/{chat_id}", response_model=List[ChatMessageResponse])
+async def get_chat_messages(chat_id: str, req: Request, _user: str = Depends(get_current_user)):
     """Get all messages for a chat."""
     chat_history_mgr = req.app.state.chat_history
 
     try:
-        messages = chat_history_mgr.get_all_messages(request.chat_id)
+        UUID(chat_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat_id format")
+
+    try:
+        messages = chat_history_mgr.get_all_messages(chat_id)
 
         response_list = []
         for msg in messages:

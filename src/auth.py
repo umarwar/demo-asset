@@ -1,20 +1,47 @@
 from fastapi import HTTPException, Header, status
-from config.settings import Settings
+from src.supabase_client import get_supabase_client
 
 
-async def authorize_request(x_api_key: str = Header(None)):
-    """Validate API key from X-API-Key header."""
-    if not Settings.ACCESS_API_KEY:
-        return  # No key configured — skip auth (dev mode)
+async def get_current_user(authorization: str = Header(None)) -> str:
+    """
+    Validate Supabase JWT token and return user_id.
 
-    if not x_api_key:
+    Frontend sends: Authorization: Bearer <supabase_jwt_token>
+    Backend verifies with Supabase and extracts user_id.
+    """
+    if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing API key. Provide X-API-Key header.",
+            detail="Missing Authorization header. Provide Bearer token.",
         )
 
-    if x_api_key != Settings.ACCESS_API_KEY:
+    # Extract token from "Bearer <token>"
+    parts = authorization.split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
+            detail="Invalid Authorization header. Use: Bearer <token>",
+        )
+
+    token = parts[1]
+
+    # Verify token with Supabase
+    try:
+        supabase = get_supabase_client()
+        user_response = supabase.auth.get_user(token)
+
+        if not user_response or not user_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+            )
+
+        return str(user_response.user.id)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token validation failed: {str(e)}",
         )
